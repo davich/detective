@@ -416,6 +416,36 @@
     document.getElementById("dialogue-form").classList.remove("hidden");
     document.getElementById("dialogue-input").value = "";
     document.getElementById("dialogue-input").focus();
+
+    const hasAsked = conv.history.some((m) => m.role === "user");
+    if (!hasAsked && npc.suggestedQuestions && npc.suggestedQuestions.length) {
+      renderSuggestions(npc.suggestedQuestions);
+    } else {
+      hideSuggestions();
+    }
+  }
+
+  function renderSuggestions(questions) {
+    const box = document.getElementById("dialogue-suggestions");
+    box.innerHTML = "";
+    questions.forEach((q) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "suggestion-chip";
+      btn.textContent = q;
+      btn.addEventListener("click", () => {
+        document.getElementById("dialogue-input").value = q;
+        submitDialogue();
+      });
+      box.appendChild(btn);
+    });
+    box.classList.remove("hidden");
+  }
+
+  function hideSuggestions() {
+    const box = document.getElementById("dialogue-suggestions");
+    box.classList.add("hidden");
+    box.innerHTML = "";
   }
 
   function openExaminePanel(point) {
@@ -436,6 +466,7 @@
       appendBubble("system", "New clue added to your notebook.");
     }
     document.getElementById("dialogue-form").classList.add("hidden");
+    hideSuggestions();
   }
 
   function closeDialogue() {
@@ -460,6 +491,7 @@
     const text = input.value.trim();
     if (!text) return;
     input.value = "";
+    hideSuggestions();
     sending = true;
     document.getElementById("dialogue-send").disabled = true;
 

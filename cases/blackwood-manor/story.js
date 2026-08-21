@@ -48,6 +48,11 @@ const CHARACTERS = {
       "alibi_vivian",
       "alibi_cecilia",
     ],
+    suggestedQuestions: [
+      "Can you walk me through how you found the body?",
+      "Did you notice anything unusual tonight?",
+      "Where was everyone around 9pm?",
+    ],
     systemPrompt: `${SETTING}
 
 You are JENKINS, the Blackwood family's butler for over thirty years. You are
@@ -92,6 +97,11 @@ ${RULES}`,
     greeting: "I... I'm sorry, I'm not sure I'm fit for company tonight, but ask.",
     description: "Edmund's wife of twenty years. Composed, but grieving.",
     knownClues: ["motive_embezzlement", "alibi_vivian"],
+    suggestedQuestions: [
+      "How was Edmund doing in the weeks before he died?",
+      "Did he mention anything troubling him lately?",
+      "Where were you this evening?",
+    ],
     systemPrompt: `${SETTING}
 
 You are LADY VIVIAN BLACKWOOD, Edmund's wife of twenty years. You are elegant,
@@ -130,6 +140,11 @@ ${RULES}`,
     greeting: "Oh — hi. Sorry, I just needed some air. Did you need something?",
     description: "Edmund's niece. Young, anxious, clearly on edge.",
     knownClues: ["cecilia_argument", "alibi_cecilia"],
+    suggestedQuestions: [
+      "I heard you and your uncle argued today. What was that about?",
+      "Where were you this evening?",
+      "How were things between you and Edmund lately?",
+    ],
     systemPrompt: `${SETTING}
 
 You are CECILIA BLACKWOOD, Edmund's niece, in your mid-twenties. You are anxious and
@@ -166,6 +181,11 @@ ${RULES}`,
     greeting: "Evenin'. Rough night for the house, this. What can I tell you?",
     description: "Groundskeeper for over a decade. Quiet, watchful.",
     knownClues: ["timeline_car", "garden_sighting"],
+    suggestedQuestions: [
+      "Did you notice anything unusual out here tonight?",
+      "Did you see anyone near the study this evening?",
+      "Were any cars still around later in the night?",
+    ],
     systemPrompt: `${SETTING}
 
 You are OLD TOM, the Blackwood estate's groundskeeper for over a decade. You are
@@ -202,6 +222,11 @@ ${RULES}`,
     greeting: "Detective. Terrible thing. Ask away, I've got nothing to hide.",
     description: "Edmund's business partner of many years. Smooth, confident.",
     knownClues: [],
+    suggestedQuestions: [
+      "What time did you leave tonight?",
+      "How were things between you and Edmund lately?",
+      "How's the business been going?",
+    ],
     systemPrompt: `${SETTING}
 
 You are MARCUS KANE, Edmund's business partner of many years — and, secretly, you

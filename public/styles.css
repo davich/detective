@@ -276,6 +276,30 @@ kbd {
 }
 .bubble.typing { color: var(--muted); font-style: italic; }
 
+#dialogue-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.suggestion-chip {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, color 0.15s;
+}
+.suggestion-chip:hover {
+  border-color: var(--gold);
+  color: var(--parchment);
+}
+
 #dialogue-form {
   display: flex;
   gap: 10px;
