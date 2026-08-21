@@ -31,8 +31,21 @@
     </main>
   </div>
 
+  <!-- Prologue cutscene -->
+  <div id="cutscene-modal" class="modal-overlay hidden">
+    <div class="cutscene-card">
+      <canvas id="cutscene-canvas" width="960" height="600"></canvas>
+      <div id="cutscene-caption" class="cutscene-caption">
+        <div id="cutscene-caption-title" class="cutscene-caption-title"></div>
+        <div id="cutscene-caption-body" class="cutscene-caption-body"></div>
+      </div>
+      <div id="cutscene-dots" class="cutscene-dots"></div>
+      <button id="cutscene-skip" type="button" class="ghost-btn cutscene-skip">Skip ▸</button>
+    </div>
+  </div>
+
   <!-- Intro modal -->
-  <div id="intro-modal" class="modal-overlay">
+  <div id="intro-modal" class="modal-overlay hidden">
     <div class="modal card">
       <h1 id="intro-heading">&nbsp;</h1>
       <div id="intro-copy"></div>

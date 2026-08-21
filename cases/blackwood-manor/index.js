@@ -27,14 +27,42 @@ module.exports = {
     intro: {
       heading: "Blackwood Manor",
       paragraphs: [
-        "Lord Edmund Blackwood was found dead in his study tonight, during a small " +
-          "family gathering at the estate. The household believes it was his heart — but " +
-          "the brandy glass beside him tells a different story.",
+        "Word reached you within the hour. By the time you arrive at the gates, the " +
+          "household has gathered inside — shaken, and not quite looking at each other.",
         "You are the detective. Walk the manor grounds, talk to the household, and piece " +
           "together what really happened. Everyone knows something. Not everyone is " +
           "telling the truth.",
       ],
     },
+
+    // Spoiler-free prologue cinematic, played once before the intro modal.
+    // `scene` picks a procedural renderer in public/game.js (falls back to a
+    // generic one for unrecognized keys); `title`/`body` are plain text.
+    cutscene: [
+      {
+        scene: "study_alone",
+        title: "The Study — Blackwood Manor",
+        body: "Lord Edmund Blackwood sits alone with a brandy at his elbow, the sound of " +
+          "the party drifting faintly beyond the door.",
+      },
+      {
+        scene: "time_passes",
+        title: "Later That Evening",
+        body: "The candle burns low. A clock somewhere in the house strikes nine, and the " +
+          "evening goes on without him.",
+      },
+      {
+        scene: "discovery",
+        title: "Just Past Ten",
+        body: "Jenkins comes to collect the tray — and finds his master slumped at the " +
+          "desk, utterly still.",
+      },
+      {
+        scene: "household_gathers",
+        title: "Blackwood Manor",
+        body: "A cry goes up through the halls. One by one, the household comes running.",
+      },
+    ],
   },
 
   settingPrompt: SETTING,

@@ -69,6 +69,7 @@
   let sending = false;
   let introDismissed = false;
   let resetting = false;
+  let cutsceneSeen = false;
 
   // ---------------------------------------------------------------------
   // Save / load (localStorage)
@@ -95,6 +96,7 @@
         examined: Array.from(examinedSet),
         conversations,
         introDismissed,
+        cutsceneSeen,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(state));
     } catch {
@@ -143,7 +145,9 @@
 
     if (saved.introDismissed) {
       introDismissed = true;
-      document.getElementById("intro-modal").classList.add("hidden");
+    }
+    if (saved.cutsceneSeen) {
+      cutsceneSeen = true;
     }
   }
 
@@ -204,11 +208,283 @@
     bindInput();
     bindUI();
 
+    if (!introDismissed) {
+      const scenes = (caseData.meta && caseData.meta.cutscene) || [];
+      if (!cutsceneSeen && scenes.length) {
+        startCutscene(scenes);
+      } else {
+        document.getElementById("intro-modal").classList.remove("hidden");
+      }
+    }
+
     setInterval(saveState, 2000);
     window.addEventListener("pagehide", saveState);
     window.addEventListener("beforeunload", saveState);
 
     requestAnimationFrame(loop);
+  }
+
+  // ---------------------------------------------------------------------
+  // Prologue cutscene — a short, spoiler-free cinematic played once before
+  // the intro modal, showing the death being discovered (no clues, no
+  // culprit). Scenes are data-driven (case.meta.cutscene) so any case can
+  // supply its own beats; rendering is a small library of procedural,
+  // silhouette-style scenes keyed by `scene`, with a generic fallback for
+  // unrecognized keys so a case can ship without adding new art.
+  // ---------------------------------------------------------------------
+  const cutsceneCanvas = document.getElementById("cutscene-canvas");
+  const cutsceneCtx = cutsceneCanvas.getContext("2d");
+  const CUTSCENE_HOLD_MS = 7000;
+
+  let cutsceneScenes = [];
+  let cutsceneIndex = 0;
+  let cutsceneSceneStart = 0;
+  let cutsceneRAF = null;
+
+  function startCutscene(scenes) {
+    cutsceneScenes = scenes;
+    cutsceneIndex = 0;
+    cutsceneSceneStart = performance.now();
+    document.getElementById("cutscene-modal").classList.remove("hidden");
+    buildCutsceneDots();
+    showCutsceneCaption(cutsceneScenes[0]);
+    cutsceneRAF = requestAnimationFrame(cutsceneFrame);
+  }
+
+  function cutsceneFrame(now) {
+    const scene = cutsceneScenes[cutsceneIndex];
+    if (!scene) return;
+    const t = now - cutsceneSceneStart;
+    drawCutsceneScene(scene, t);
+    if (t >= CUTSCENE_HOLD_MS) {
+      cutsceneAdvance();
+    } else {
+      cutsceneRAF = requestAnimationFrame(cutsceneFrame);
+    }
+  }
+
+  function cutsceneAdvance() {
+    if (cutsceneRAF) cancelAnimationFrame(cutsceneRAF);
+    cutsceneIndex += 1;
+    if (cutsceneIndex >= cutsceneScenes.length) {
+      finishCutscene();
+      return;
+    }
+    cutsceneSceneStart = performance.now();
+    updateCutsceneDots();
+    showCutsceneCaption(cutsceneScenes[cutsceneIndex]);
+    cutsceneRAF = requestAnimationFrame(cutsceneFrame);
+  }
+
+  function finishCutscene() {
+    if (cutsceneRAF) cancelAnimationFrame(cutsceneRAF);
+    cutsceneRAF = null;
+    cutsceneSeen = true;
+    saveState();
+    document.getElementById("cutscene-modal").classList.add("hidden");
+    document.getElementById("intro-modal").classList.remove("hidden");
+  }
+
+  function buildCutsceneDots() {
+    const wrap = document.getElementById("cutscene-dots");
+    wrap.innerHTML = "";
+    cutsceneScenes.forEach((_, i) => {
+      const d = document.createElement("div");
+      d.className = "dot" + (i === 0 ? " active" : "");
+      wrap.appendChild(d);
+    });
+  }
+
+  function updateCutsceneDots() {
+    const dots = document.querySelectorAll("#cutscene-dots .dot");
+    dots.forEach((d, i) => d.classList.toggle("active", i === cutsceneIndex));
+  }
+
+  function showCutsceneCaption(scene) {
+    const caption = document.getElementById("cutscene-caption");
+    caption.classList.remove("show");
+    setTimeout(() => {
+      document.getElementById("cutscene-caption-title").textContent = scene.title || "";
+      document.getElementById("cutscene-caption-body").textContent = scene.body || "";
+      caption.classList.add("show");
+    }, 220);
+  }
+
+  function vignetteOverlay(c, w, h, strength) {
+    const g = c.createRadialGradient(w / 2, h * 0.52, h * 0.16, w / 2, h * 0.52, h * 0.78);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, `rgba(0,0,0,${strength})`);
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, h);
+  }
+
+  function drawGlow(c, x, y, r, color) {
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // Simple humanoid silhouette (seated or standing), reused across scenes.
+  function drawFigure(c, x, y, opts = {}) {
+    const scale = opts.scale || 1;
+    const tone = opts.tone || "#0a0710";
+    c.save();
+    c.translate(x, y);
+    c.scale(scale, scale);
+    c.fillStyle = tone;
+    if (opts.seated) {
+      c.save();
+      c.rotate(opts.lean || 0.18);
+      c.beginPath();
+      c.ellipse(0, -30, 15, 24, 0, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+      c.beginPath();
+      c.arc(opts.headX || 6, opts.headY || -56, 10, 0, Math.PI * 2);
+      c.fill();
+    } else {
+      c.fillRect(-9, -46, 18, 42);
+      c.beginPath();
+      c.arc(0, -54, 10, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.restore();
+  }
+
+  function renderStudyAlone(c, w, h, t) {
+    const flicker = 0.9 + Math.sin(t / 140) * 0.06 + Math.sin(t / 71) * 0.03;
+    drawGlow(c, 350, 360, 230 * flicker, "rgba(214,150,70,0.35)");
+    // desk
+    c.fillStyle = "#1c130c";
+    c.fillRect(270, 372, 190, 46);
+    // seated figure at the desk
+    drawFigure(c, 350, 372, { seated: true, lean: 0.12 });
+    // glass on the desk, catching the glow
+    c.fillStyle = "rgba(214,150,70,0.85)";
+    c.beginPath();
+    c.ellipse(420, 366, 5, 3, 0, 0, Math.PI * 2);
+    c.fill();
+    // tall window, cool moonlight, right side
+    const win = c.createLinearGradient(0, 60, 0, 420);
+    win.addColorStop(0, "rgba(90,110,150,0.16)");
+    win.addColorStop(1, "rgba(40,50,70,0.05)");
+    c.fillStyle = win;
+    c.fillRect(760, 60, 140, 360);
+  }
+
+  function renderTimePasses(c, w, h, t, holdMs) {
+    const progress = Math.min(1, t / holdMs);
+    const flicker = (0.55 - progress * 0.3) + Math.sin(t / 110) * 0.05;
+    drawGlow(c, 350, 360, 190 * Math.max(flicker, 0.15), "rgba(214,150,70,0.3)");
+    c.fillStyle = "#1c130c";
+    c.fillRect(270, 372, 190, 46);
+    drawFigure(c, 350, 372, { seated: true, lean: 0.12, tone: "#080609" });
+    // a small clock, hand slowly sweeping, top corner
+    c.save();
+    c.translate(860, 90);
+    c.strokeStyle = "rgba(232,201,136,0.4)";
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(0, 0, 26, 0, Math.PI * 2);
+    c.stroke();
+    c.save();
+    c.rotate((t / 1400) * Math.PI * 2);
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.lineTo(0, -18);
+    c.stroke();
+    c.restore();
+    c.restore();
+    // darkening overlay as the scene progresses
+    c.fillStyle = `rgba(4,3,6,${progress * 0.35})`;
+    c.fillRect(0, 0, w, h);
+  }
+
+  function renderDiscovery(c, w, h, t) {
+    const startle = Math.max(0, 1 - t / 500);
+    // hallway light spilling through an open door, left side
+    const doorGlow = c.createLinearGradient(0, 0, 260, 0);
+    doorGlow.addColorStop(0, "rgba(214,170,110,0.28)");
+    doorGlow.addColorStop(1, "rgba(214,170,110,0)");
+    c.fillStyle = doorGlow;
+    c.fillRect(0, 0, 260, h);
+
+    drawGlow(c, 350, 360, 150, "rgba(214,150,70,0.22)");
+    c.fillStyle = "#1c130c";
+    c.fillRect(270, 372, 190, 46);
+    // figure now slumped forward over the desk
+    drawFigure(c, 350, 372, { seated: true, lean: 0.62, headX: 24, headY: -34, tone: "#08060a" });
+
+    // Jenkins in the doorway, startled
+    const jitter = startle * Math.sin(t / 18) * 3;
+    drawFigure(c, 150 + jitter, 400, { scale: 1.02, tone: "#0a0710" });
+    // a dropped tray/cup, small circles settling near his feet
+    if (t > 450) {
+      c.fillStyle = "rgba(200,190,180,0.55)";
+      c.beginPath();
+      c.ellipse(178, 424, 9, 3, 0, 0, Math.PI * 2);
+      c.fill();
+      c.beginPath();
+      c.arc(196, 420, 3, 0, Math.PI * 2);
+      c.fill();
+    }
+    // a heartbeat-like double vignette pulse for emphasis
+    const pulse = Math.max(0, Math.sin(t / 900) * 0.12);
+    c.fillStyle = `rgba(0,0,0,${pulse})`;
+    c.fillRect(0, 0, w, h);
+  }
+
+  function renderHouseholdGathers(c, w, h, t) {
+    const p = Math.min(1, t / 3200);
+    const doorGlow = c.createLinearGradient(300, 0, 660, 0);
+    doorGlow.addColorStop(0, "rgba(214,170,110,0)");
+    doorGlow.addColorStop(0.5, "rgba(214,170,110,0.3)");
+    doorGlow.addColorStop(1, "rgba(214,170,110,0)");
+    c.fillStyle = doorGlow;
+    c.fillRect(300, 40, 360, h - 80);
+
+    const bob = (seed) => Math.sin(t / 130 + seed) * 2;
+    // two figures hurrying in from the left
+    drawFigure(c, 120 + p * 190, 470 + bob(1), { tone: "#0a0710" });
+    drawFigure(c, 60 + p * 150, 500 + bob(2), { scale: 0.94, tone: "#0a0710" });
+    // one from the right
+    drawFigure(c, 860 - p * 190, 480 + bob(3), { scale: 0.98, tone: "#0a0710" });
+    // the still figure at the center, glimpsed through the gathering crowd
+    drawGlow(c, 480, 330, 130, "rgba(214,150,70,0.18)");
+    drawFigure(c, 480, 350, { seated: true, lean: 0.5, headX: 20, headY: -34, tone: "#060509" });
+  }
+
+  function renderGenericScene(c, w, h, t) {
+    const flicker = 0.9 + Math.sin(t / 150) * 0.06;
+    drawGlow(c, w / 2, h * 0.6, 220 * flicker, "rgba(214,150,70,0.25)");
+    drawFigure(c, w / 2, h * 0.62, { seated: true, lean: 0.15, tone: "#0a0710" });
+  }
+
+  const CUTSCENE_RENDERERS = {
+    study_alone: renderStudyAlone,
+    time_passes: renderTimePasses,
+    discovery: renderDiscovery,
+    household_gathers: renderHouseholdGathers,
+  };
+
+  function drawCutsceneScene(scene, t) {
+    const c = cutsceneCtx;
+    const w = cutsceneCanvas.width;
+    const h = cutsceneCanvas.height;
+    c.clearRect(0, 0, w, h);
+    const bg = c.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, "#161020");
+    bg.addColorStop(1, "#08060b");
+    c.fillStyle = bg;
+    c.fillRect(0, 0, w, h);
+
+    const renderer = CUTSCENE_RENDERERS[scene.scene] || renderGenericScene;
+    renderer(c, w, h, t, CUTSCENE_HOLD_MS);
+    vignetteOverlay(c, w, h, 0.5);
   }
 
   // ---------------------------------------------------------------------
@@ -245,7 +521,8 @@
   }
 
   function closeTopLayer() {
-    if (dialogueOpen) closeDialogue();
+    if (!document.getElementById("cutscene-modal").classList.contains("hidden")) finishCutscene();
+    else if (dialogueOpen) closeDialogue();
     else if (!document.getElementById("accuse-modal").classList.contains("hidden")) hideAccuseModal();
     else if (!document.getElementById("reset-modal").classList.contains("hidden")) {
       document.getElementById("reset-modal").classList.add("hidden");
@@ -256,6 +533,15 @@
   // UI wiring
   // ---------------------------------------------------------------------
   function bindUI() {
+    document.getElementById("cutscene-skip").addEventListener("click", (e) => {
+      e.stopPropagation();
+      finishCutscene();
+    });
+    document.getElementById("cutscene-modal").addEventListener("click", (e) => {
+      if (e.target.id === "cutscene-skip") return;
+      cutsceneAdvance();
+    });
+
     document.getElementById("begin-btn").addEventListener("click", () => {
       document.getElementById("intro-modal").classList.add("hidden");
       introDismissed = true;
@@ -591,7 +877,12 @@
 
   let lastTime = performance.now();
   function update(dt) {
-    if (dialogueOpen || notebookOpen || !document.getElementById("intro-modal").classList.contains("hidden")) {
+    if (
+      dialogueOpen ||
+      notebookOpen ||
+      !document.getElementById("intro-modal").classList.contains("hidden") ||
+      !document.getElementById("cutscene-modal").classList.contains("hidden")
+    ) {
       player.moving = false;
       return;
     }

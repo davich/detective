@@ -188,6 +188,92 @@ kbd {
 
 .lede { color: var(--muted); line-height: 1.5; }
 
+/* Prologue cutscene */
+.cutscene-card {
+  position: relative;
+  width: min(960px, 94vw);
+  aspect-ratio: 960 / 600;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  background: #000;
+  cursor: pointer;
+}
+
+#cutscene-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.cutscene-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 34px 40px 30px;
+  background: linear-gradient(180deg, rgba(6,4,8,0) 0%, rgba(6,4,8,0.85) 55%, rgba(6,4,8,0.95) 100%);
+  pointer-events: none;
+}
+
+.cutscene-caption-title,
+.cutscene-caption-body {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.cutscene-caption.show .cutscene-caption-title,
+.cutscene-caption.show .cutscene-caption-body {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cutscene-caption-title {
+  font-family: "Playfair Display", serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: var(--gold-bright);
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+
+.cutscene-caption-body {
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--parchment);
+  max-width: 560px;
+  transition-delay: 0.08s;
+}
+
+.cutscene-dots {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 7px;
+}
+
+.cutscene-dots .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(242, 233, 220, 0.28);
+  transition: background 0.3s ease;
+}
+
+.cutscene-dots .dot.active { background: var(--gold-bright); }
+
+.cutscene-skip {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(10, 8, 12, 0.55);
+  backdrop-filter: blur(2px);
+}
+
 .controls-list {
   list-style: none;
   padding: 0;
