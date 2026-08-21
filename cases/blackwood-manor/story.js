@@ -1,6 +1,6 @@
-// Server-side only. Contains the solution and full character knowledge.
-// Nothing in this file is ever sent to the client verbatim except the
-// "public" fields exposed via buildPublicCharacter().
+// Case content for "Blackwood Manor": characters, clues, and the solution the
+// judge/confession prompts are built from. Nothing here is sent to the client
+// verbatim except what lib/gameEngine.js#buildPublicCharacter extracts.
 
 const SETTING = `You are a character inside "Blackwood Manor", a murder mystery being
 investigated by a detective (the player) on the night after the family patriarch,
@@ -38,6 +38,7 @@ const CHARACTERS = {
     room: "hall",
     pos: { x: 920, y: 560 },
     colors: { body: "#2b2b33", accent: "#d9c68a", skin: "#e0b088" },
+    look: { hat: "bowler" },
     greeting: "Detective. A terrible business, this. However may I be of service?",
     description:
       "Been in service to the Blackwood family for thirty years. Found the body.",
@@ -87,6 +88,7 @@ ${RULES}`,
     room: "drawing_room",
     pos: { x: 300, y: 220 },
     colors: { body: "#5a2438", accent: "#e3c98a", skin: "#e8c39e" },
+    look: { hat: "sunhat" },
     greeting: "I... I'm sorry, I'm not sure I'm fit for company tonight, but ask.",
     description: "Edmund's wife of twenty years. Composed, but grieving.",
     knownClues: ["motive_embezzlement", "alibi_vivian"],
@@ -124,6 +126,7 @@ ${RULES}`,
     room: "garden",
     pos: { x: 1300, y: 760 },
     colors: { body: "#2f4d5a", accent: "#c97b63", skin: "#e8c39e" },
+    look: { hat: "ponytail" },
     greeting: "Oh — hi. Sorry, I just needed some air. Did you need something?",
     description: "Edmund's niece. Young, anxious, clearly on edge.",
     knownClues: ["cecilia_argument", "alibi_cecilia"],
@@ -159,6 +162,7 @@ ${RULES}`,
     room: "garden",
     pos: { x: 1200, y: 650 },
     colors: { body: "#4c5a34", accent: "#8a6a3a", skin: "#c98a5e" },
+    look: { hat: "strawhat" },
     greeting: "Evenin'. Rough night for the house, this. What can I tell you?",
     description: "Groundskeeper for over a decade. Quiet, watchful.",
     knownClues: ["timeline_car", "garden_sighting"],
@@ -194,6 +198,7 @@ ${RULES}`,
     room: "hall",
     pos: { x: 640, y: 450 },
     colors: { body: "#1e2a3a", accent: "#9a7b3a", skin: "#d9a878" },
+    look: { hat: "slick" },
     greeting: "Detective. Terrible thing. Ask away, I've got nothing to hide.",
     description: "Edmund's business partner of many years. Smooth, confident.",
     knownClues: [],
@@ -271,12 +276,6 @@ const CLUE_LIBRARY = {
   },
 };
 
-const SOLUTION = {
-  suspect: "marcus",
-  weapon: "brandy",
-  motive: "embezzlement",
-};
-
 const SUSPECT_OPTIONS = [
   { id: "marcus", label: "Marcus Kane" },
   { id: "vivian", label: "Lady Vivian Blackwood" },
@@ -285,64 +284,60 @@ const SUSPECT_OPTIONS = [
   { id: "tom", label: "Old Tom" },
 ];
 
-const WEAPON_OPTIONS = [
-  { id: "brandy", label: "Poisoned Brandy" },
-  { id: "candlestick", label: "Candlestick" },
-  { id: "letter_opener", label: "Letter Opener" },
-  { id: "shears", label: "Garden Shears" },
-  { id: "revolver", label: "Revolver" },
-];
+// The suspect id that is actually guilty, and which of the judge's elements
+// (see lib/gameEngine.js) must be identified for an accusation to count as
+// correct.
+const SOLUTION_SUSPECT = "marcus";
+const REQUIRED_JUDGE_ELEMENTS = ["weaponIdentified", "motiveIdentified"];
 
-const MOTIVE_OPTIONS = [
-  { id: "embezzlement", label: "Embezzlement Exposure" },
-  { id: "inheritance", label: "Inheritance Dispute" },
-  { id: "affair", label: "Jealous Affair" },
-  { id: "gambling", label: "Gambling Debt" },
-  { id: "blackmail", label: "Blackmail" },
-];
+// Ground truth handed to the LLM judge. Never sent to the client.
+const CASE_SOLUTION_BRIEF = `TRUE SOLUTION (the player does not get to see this text):
+- The killer is Marcus Kane, Edmund's business partner.
+- Method: he slipped poison into Edmund's brandy that evening.
+- Motive: Edmund had discovered Marcus was embezzling money from their shared company
+  and planned to report it to the police the next morning.
+- Opportunity: Marcus lied about leaving around 8:45pm. He actually slipped out to the
+  study's garden-side door around 9:15-9:20pm to poison the drink, and didn't truly
+  leave the estate until roughly 9:30-9:35pm.`;
 
-function label(options, id) {
-  const found = options.find((o) => o.id === id);
-  return found ? found.label : id;
-}
+// Offline-mode fallback keyword matching for each judge element, used when no
+// OPENROUTER_API_KEY is configured (or the live judge call fails).
+const MOCK_JUDGE_PATTERNS = {
+  weaponIdentified: /brandy|poison|drink|glass|wine/,
+  motiveIdentified: /embezzl|money|steal|fraud|book|ledger|account/,
+  opportunityIdentified: /garden|9:1|9:2|9:3|late|car|gate|lied|timeline|door/,
+};
 
-const WIN_NARRATIVE = `You lay it all out: the brandy that smelled faintly of bitter almonds, the
-raised voices from the study around nine, the figure Old Tom saw slip toward the
-garden door, and Marcus's car still sitting at the gate at 9:30 — forty-five minutes
-after he swore he'd gone home. Confronted with the timeline, Marcus's composure
-finally cracks. Edmund had found the missing money. Edmund was going to the police in
-the morning. So Marcus made sure he never got the chance.
+// Briefing injected into the killer's confession prompt once the player wins,
+// plus a scripted fallback used in offline mode / if the live call fails.
+const CONFESSION = {
+  characterId: "marcus",
+  briefing: `In truth, you poisoned Edmund's brandy this evening because he had discovered
+you had been embezzling from their shared company for over a year and was going to go
+to the police the next morning. You slipped out to the garden-side door of the study
+around 9:15-9:20pm while Edmund was distracted, poisoned his glass, and didn't
+actually leave the estate until around 9:30-9:35pm, despite telling everyone you left
+around 8:45pm.`,
+  fallbackText: `Marcus's easy smile finally slips. "Fine," he says quietly, not meeting anyone's
+eyes. "Edmund found the missing money. He was going to the police in the morning, and
+I— I couldn't let that happen. I put something in his brandy. I told everyone I left
+at quarter to nine, but I was still here, out by the garden door, past nine thirty."
+His hands are shaking. "I didn't plan for it to feel like this."`,
+};
 
-Case closed, Detective.`;
-
-const LOSE_NARRATIVE = `You state your case, but the pieces don't quite fit — someone in the room
-raises an eyebrow, and you can feel the accusation isn't landing. Maybe it's the
-wrong suspect, the wrong weapon, or the wrong motive. Whatever it is, this isn't
-enough to hold up. Go back, ask a few more questions, and try again when you're
-sure.`;
-
-function buildPublicCharacter(c) {
-  return {
-    id: c.id,
-    name: c.name,
-    title: c.title,
-    room: c.room,
-    pos: c.pos,
-    colors: c.colors,
-    greeting: c.greeting,
-    description: c.description,
-  };
-}
+const LOSE_NARRATIVE = `You state your case, but the pieces don't quite fit — someone in the room raises an
+eyebrow, and you can feel the accusation isn't landing. Go back, ask a few more
+questions, and try again when you're sure.`;
 
 module.exports = {
+  SETTING,
   CHARACTERS,
   CLUE_LIBRARY,
-  SOLUTION,
   SUSPECT_OPTIONS,
-  WEAPON_OPTIONS,
-  MOTIVE_OPTIONS,
-  WIN_NARRATIVE,
+  SOLUTION_SUSPECT,
+  REQUIRED_JUDGE_ELEMENTS,
+  CASE_SOLUTION_BRIEF,
+  MOCK_JUDGE_PATTERNS,
+  CONFESSION,
   LOSE_NARRATIVE,
-  buildPublicCharacter,
-  label,
 };

@@ -2,58 +2,40 @@
   "use strict";
 
   // ---------------------------------------------------------------------
-  // World layout
+  // World layout — populated from /api/case on boot() so any case can supply
+  // its own map without touching this file. See cases/*/world.js for shape.
   // ---------------------------------------------------------------------
-  const WORLD_W = 1600;
-  const WORLD_H = 1000;
   const VIEW_W = 960;
   const VIEW_H = 600;
   const INTERACT_RADIUS = 78;
 
-  const ROOMS = [
-    { id: "hall", x: 560, y: 360, w: 480, h: 300, floor: "#4a3626", label: "Entrance Hall" },
-    { id: "study", x: 1080, y: 60, w: 440, h: 340, floor: "#3c1f24", label: "The Study" },
-    { id: "drawing_room", x: 80, y: 60, w: 440, h: 340, floor: "#28341f", label: "Drawing Room" },
-    { id: "kitchen", x: 80, y: 560, w: 440, h: 340, floor: "#33383f", label: "Kitchen" },
-    { id: "garden", x: 1080, y: 560, w: 460, h: 360, floor: "#1e3521", label: "Garden", outdoor: true },
-  ];
+  let WORLD_W = VIEW_W;
+  let WORLD_H = VIEW_H;
+  let ROOMS = [];
+  let PROPS = [];
+  let CIRCLE_OBSTACLES = [];
+  let EXAMINE_POINTS = [];
 
-  const PROPS = [
-    { x: 1220, y: 150, w: 120, h: 60, color: "#4a3220", label: "desk" },
-    { x: 1090, y: 75, w: 18, h: 220, color: "#2a1c14", label: "shelf" },
-    { x: 120, y: 280, w: 150, h: 46, color: "#6b3f42", label: "sofa" },
-    { x: 480, y: 75, w: 18, h: 260, color: "#2a1c14", label: "shelf" },
-    { x: 100, y: 590, w: 210, h: 36, color: "#5a5a62", label: "counter" },
-    { x: 340, y: 760, w: 110, h: 66, color: "#4a3220", label: "table" },
-    { x: 700, y: 430, w: 170, h: 66, color: "#4a3220", label: "table" },
-    { x: 600, y: 405, w: 56, h: 40, color: "#3a2a1c", label: "cart" },
-    { x: 1300, y: 806, w: 84, h: 26, color: "#3a2a1c", label: "bench" },
-  ];
+  // Decorative renderers an examine point can opt into via its `decor` field.
+  // Add new keys here as new cases need new scene dressing.
+  const EXAMINE_DECOR_RENDERERS = {
+    chalk_outline(point) {
+      ctx.strokeStyle = "rgba(255,255,255,0.55)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.ellipse(point.x - 40, point.y + 30, 26, 12, 0.3, 0, Math.PI * 2);
+      ctx.moveTo(point.x - 30, point.y + 22);
+      ctx.lineTo(point.x + 10, point.y - 4);
+      ctx.lineTo(point.x + 40, point.y + 6);
+      ctx.stroke();
+      ctx.setLineDash([]);
 
-  const FOUNTAIN = { x: 1265, y: 685, r: 40 };
-
-  const EXAMINE_POINTS = [
-    {
-      id: "crime_scene",
-      room: "study",
-      x: 1260,
-      y: 175,
-      radius: 90,
-      title: "The Study — Crime Scene",
-      clueId: "weapon_brandy",
-      flavor:
-        "A chalk outline marks where Edmund was found slumped over his desk. Beside it, an " +
-        "overturned brandy glass, a dark stain soaked into the rug beneath it.",
+      ctx.fillStyle = "#7a2e1a";
+      ctx.beginPath();
+      ctx.ellipse(point.x + 18, point.y - 8, 14, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
     },
-  ];
-
-  // Character wardrobe / silhouette config (visual only, keyed by character id)
-  const LOOKS = {
-    jenkins: { hat: "bowler" },
-    vivian: { hat: "sunhat" },
-    cecilia: { hat: "ponytail" },
-    tom: { hat: "strawhat" },
-    marcus: { hat: "slick" },
   };
 
   // ---------------------------------------------------------------------
@@ -63,8 +45,8 @@
   const ctx = canvas.getContext("2d");
 
   const player = {
-    x: 800,
-    y: 520,
+    x: 0,
+    y: 0,
     w: 26,
     h: 34,
     speed: 210,
@@ -75,7 +57,7 @@
   const keys = new Set();
   let npcs = [];
   let clueLibrary = {};
-  let options = { suspects: [], weapons: [], motives: [] };
+  let suspects = [];
   let discovered = []; // ordered clue ids
   const discoveredSet = new Set();
   const conversations = {}; // characterId -> {history:[]}
@@ -85,21 +67,126 @@
   let activeCharacterId = null;
   let notebookOpen = false;
   let sending = false;
+  let introDismissed = false;
+
+  // ---------------------------------------------------------------------
+  // Save / load (localStorage)
+  // ---------------------------------------------------------------------
+  // Scoped per case id (set in boot()) so switching cases never loads another
+  // case's save data (mismatched clue ids, out-of-bounds player position, etc).
+  let SAVE_KEY = "game-save-v1";
+
+  function loadSavedState() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveState() {
+    try {
+      const state = {
+        player: { x: player.x, y: player.y, facing: player.facing },
+        discovered,
+        examined: Array.from(examinedSet),
+        conversations,
+        introDismissed,
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    } catch {
+      // localStorage unavailable (private mode, quota, etc.) — progress just won't persist
+    }
+  }
+
+  function clearSavedState() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+
+  function applySavedState(saved) {
+    if (!saved) return;
+
+    if (saved.player && Number.isFinite(saved.player.x) && Number.isFinite(saved.player.y)) {
+      player.x = saved.player.x;
+      player.y = saved.player.y;
+      if (saved.player.facing === 1 || saved.player.facing === -1) player.facing = saved.player.facing;
+    }
+
+    if (Array.isArray(saved.discovered)) {
+      saved.discovered.forEach((id) => {
+        if (clueLibrary[id] && !discoveredSet.has(id)) {
+          discoveredSet.add(id);
+          discovered.push(id);
+        }
+      });
+      document.getElementById("clue-count").textContent = String(discovered.length);
+    }
+
+    if (Array.isArray(saved.examined)) {
+      saved.examined.forEach((id) => examinedSet.add(id));
+    }
+
+    if (saved.conversations && typeof saved.conversations === "object") {
+      Object.keys(saved.conversations).forEach((id) => {
+        if (conversations[id] && Array.isArray(saved.conversations[id].history)) {
+          conversations[id].history = saved.conversations[id].history;
+        }
+      });
+    }
+
+    if (saved.introDismissed) {
+      introDismissed = true;
+      document.getElementById("intro-modal").classList.add("hidden");
+    }
+  }
 
   // ---------------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------------
+  function applyCaseMeta(meta) {
+    document.title = `${meta.title} — ${meta.tagline || ""}`.trim().replace(/\s*—\s*$/, "");
+    document.getElementById("hud-title").textContent = meta.title;
+    document.getElementById("hud-objective").innerHTML =
+      `${escapeHtml(meta.objective)} <kbd>WASD</kbd>/<kbd>Arrows</kbd> to move, <kbd>E</kbd> to interact.`;
+
+    document.getElementById("intro-heading").textContent = (meta.intro && meta.intro.heading) || meta.title;
+    const copy = document.getElementById("intro-copy");
+    copy.innerHTML = "";
+    ((meta.intro && meta.intro.paragraphs) || []).forEach((text, i) => {
+      const p = document.createElement("p");
+      p.className = i === 0 ? "lede" : "";
+      p.textContent = text;
+      copy.appendChild(p);
+    });
+  }
+
+  function applyWorld(world) {
+    WORLD_W = world.width;
+    WORLD_H = world.height;
+    ROOMS = world.rooms || [];
+    PROPS = world.props || [];
+    CIRCLE_OBSTACLES = world.circleObstacles || [];
+    EXAMINE_POINTS = world.examinePoints || [];
+    player.x = world.playerStart.x;
+    player.y = world.playerStart.y;
+  }
+
   async function boot() {
-    const [chars, clues, opts] = await Promise.all([
-      fetch("/api/characters").then((r) => r.json()),
-      fetch("/api/clues").then((r) => r.json()),
-      fetch("/api/options").then((r) => r.json()),
-    ]);
+    const caseData = await fetch("/api/case").then((r) => r.json());
 
-    clueLibrary = clues;
-    options = opts;
+    SAVE_KEY = `game-save-${caseData.id}-v1`;
+    clueLibrary = caseData.clueLibrary;
+    suspects = caseData.suspects;
 
-    npcs = chars.map((c) => ({
+    applyCaseMeta(caseData.meta);
+    applyWorld(caseData.world);
+
+    npcs = caseData.characters.map((c) => ({
       ...c,
       w: 26,
       h: 34,
@@ -109,9 +196,15 @@
 
     npcs.forEach((n) => (conversations[n.id] = { history: [] }));
 
+    applySavedState(loadSavedState());
+
     populateAccuseOptions();
     bindInput();
     bindUI();
+
+    setInterval(saveState, 2000);
+    window.addEventListener("pagehide", saveState);
+    window.addEventListener("beforeunload", saveState);
 
     requestAnimationFrame(loop);
   }
@@ -152,7 +245,9 @@
   function closeTopLayer() {
     if (dialogueOpen) closeDialogue();
     else if (!document.getElementById("accuse-modal").classList.contains("hidden")) hideAccuseModal();
-    else if (notebookOpen) toggleNotebook();
+    else if (!document.getElementById("reset-modal").classList.contains("hidden")) {
+      document.getElementById("reset-modal").classList.add("hidden");
+    } else if (notebookOpen) toggleNotebook();
   }
 
   // ---------------------------------------------------------------------
@@ -161,6 +256,19 @@
   function bindUI() {
     document.getElementById("begin-btn").addEventListener("click", () => {
       document.getElementById("intro-modal").classList.add("hidden");
+      introDismissed = true;
+      saveState();
+    });
+
+    document.getElementById("reset-btn").addEventListener("click", () => {
+      document.getElementById("reset-modal").classList.remove("hidden");
+    });
+    document.getElementById("reset-cancel").addEventListener("click", () => {
+      document.getElementById("reset-modal").classList.add("hidden");
+    });
+    document.getElementById("reset-confirm").addEventListener("click", () => {
+      clearSavedState();
+      window.location.reload();
     });
 
     document.getElementById("notebook-btn").addEventListener("click", toggleNotebook);
@@ -185,9 +293,7 @@
   }
 
   function populateAccuseOptions() {
-    fillSelect("accuse-suspect", options.suspects);
-    fillSelect("accuse-weapon", options.weapons);
-    fillSelect("accuse-motive", options.motives);
+    fillSelect("accuse-suspect", suspects);
   }
   function fillSelect(id, opts) {
     const el = document.getElementById(id);
@@ -209,19 +315,40 @@
 
   async function submitAccusation() {
     const suspect = document.getElementById("accuse-suspect").value;
-    const weapon = document.getElementById("accuse-weapon").value;
-    const motive = document.getElementById("accuse-motive").value;
-    const res = await fetch("/api/accuse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ suspect, weapon, motive }),
-    }).then((r) => r.json());
+    const justification = document.getElementById("accuse-justification").value.trim();
+    if (!justification) return;
 
+    const submitBtn = document.getElementById("accuse-submit");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Weighing the case…";
+
+    let res;
+    try {
+      res = await fetch("/api/accuse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suspect, justification }),
+      }).then((r) => r.json());
+    } catch {
+      res = { correct: false, feedback: "Something went wrong reaching the AI service. Try again." };
+    }
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Accuse";
     hideAccuseModal();
+
     const title = document.getElementById("result-title");
     title.textContent = res.correct ? "Case Closed" : "Not Quite";
     title.className = res.correct ? "win" : "lose";
-    document.getElementById("result-narrative").textContent = res.narrative;
+    document.getElementById("result-narrative").textContent = res.error || res.feedback || "";
+
+    const confessionEl = document.getElementById("result-confession");
+    if (res.correct && res.confession) {
+      confessionEl.textContent = res.confession;
+      confessionEl.classList.remove("hidden");
+    } else {
+      confessionEl.classList.add("hidden");
+    }
     document.getElementById("result-modal").classList.remove("hidden");
   }
 
@@ -255,6 +382,7 @@
     discovered.push(id);
     document.getElementById("clue-count").textContent = String(discovered.length);
     if (notebookOpen) renderNotebook();
+    saveState();
   }
 
   function escapeHtml(s) {
@@ -281,6 +409,7 @@
     if (conv.history.length === 0) {
       appendBubble("them", npc.greeting);
       conv.history.push({ role: "assistant", content: npc.greeting });
+      saveState();
     } else {
       conv.history.forEach((m) => appendBubble(m.role === "user" ? "me" : "them", m.content));
     }
@@ -358,6 +487,7 @@
           addClue(id);
           if (wasNew) appendBubble("system", "New clue added to your notebook.");
         });
+        saveState();
       }
     } catch (err) {
       typingBubble.remove();
@@ -416,9 +546,11 @@
     for (const p of PROPS) {
       if (rectsOverlap(box, p)) return true;
     }
-    const fdx = box.x + box.w / 2 - FOUNTAIN.x;
-    const fdy = box.y + box.h - FOUNTAIN.y;
-    if (Math.hypot(fdx, fdy) < FOUNTAIN.r) return true;
+    for (const o of CIRCLE_OBSTACLES) {
+      const dx = box.x + box.w / 2 - o.x;
+      const dy = box.y + box.h - o.y;
+      if (Math.hypot(dx, dy) < o.r) return true;
+    }
     return false;
   }
 
@@ -497,21 +629,22 @@
       ctx.fillStyle = "rgba(232,201,136,0.85)";
       ctx.font = "600 13px Inter, sans-serif";
       ctx.fillText(r.label.toUpperCase(), r.x + 12, r.y + 20);
+
+      (r.decor || []).forEach((d) => {
+        ctx.fillStyle = d.color;
+        ctx.fillRect(d.x, d.y, d.w, d.h);
+      });
     });
 
-    // study rug + tape flourish
-    const study = ROOMS.find((r) => r.id === "study");
-    ctx.fillStyle = "#2a1418";
-    ctx.fillRect(study.x + 60, study.y + 70, 260, 200);
-
-    // garden fountain
-    ctx.fillStyle = "#3c5560";
-    ctx.beginPath();
-    ctx.arc(FOUNTAIN.x, FOUNTAIN.y, FOUNTAIN.r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#7a9aa5";
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    CIRCLE_OBSTACLES.forEach((o) => {
+      ctx.fillStyle = o.color || "#3c5560";
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = o.strokeColor || "#7a9aa5";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    });
 
     ctx.restore();
   }
@@ -532,26 +665,13 @@
     ctx.restore();
   }
 
-  function drawChalkOutline(cam) {
+  function drawExamineDecor(cam) {
     ctx.save();
     ctx.translate(-cam.x, -cam.y);
-    const ex = EXAMINE_POINTS[0];
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.ellipse(ex.x - 40, ex.y + 30, 26, 12, 0.3, 0, Math.PI * 2);
-    ctx.moveTo(ex.x - 30, ex.y + 22);
-    ctx.lineTo(ex.x + 10, ex.y - 4);
-    ctx.lineTo(ex.x + 40, ex.y + 6);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // spilled glass
-    ctx.fillStyle = "#7a2e1a";
-    ctx.beginPath();
-    ctx.ellipse(ex.x + 18, ex.y - 8, 14, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
+    EXAMINE_POINTS.forEach((point) => {
+      const render = point.decor && EXAMINE_DECOR_RENDERERS[point.decor];
+      if (render) render(point);
+    });
     ctx.restore();
   }
 
@@ -680,7 +800,7 @@
   function draw(cam, interactable, time) {
     drawRooms(cam);
     drawProps(cam);
-    drawChalkOutline(cam);
+    drawExamineDecor(cam);
 
     ctx.save();
     ctx.translate(-cam.x, -cam.y);
@@ -688,7 +808,7 @@
     // draw npcs + player sorted by y for depth
     const drawables = [
       ...npcs.map((n) => ({
-        x: n.pos.x, y: n.pos.y, colors: n.colors, hat: (LOOKS[n.id] || {}).hat,
+        x: n.pos.x, y: n.pos.y, colors: n.colors, hat: (n.look || {}).hat,
         facing: -1, bob: time / 400 + (n.bobSeed || 0), label: n.name,
         highlighted: interactable && interactable.type === "npc" && interactable.ref.id === n.id,
       })),

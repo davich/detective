@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Blackwood Manor — A Murder Mystery</title>
+<title>Loading…</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
@@ -16,11 +16,12 @@
 
   <div id="app">
     <header id="hud">
-      <div id="hud-title">Blackwood&nbsp;Manor</div>
-      <div id="hud-objective">Find Edmund's killer. Walk with <kbd>WASD</kbd>/<kbd>Arrows</kbd>, press <kbd>E</kbd> near someone to talk.</div>
+      <div id="hud-title">&nbsp;</div>
+      <div id="hud-objective">&nbsp;</div>
       <div id="hud-actions">
         <button id="notebook-btn" class="ghost-btn">📓 Notebook <span id="clue-count">0</span></button>
         <button id="accuse-btn" class="ghost-btn accent">Make an Accusation</button>
+        <button id="reset-btn" class="ghost-btn" title="Erase saved progress and start over">↺ Reset</button>
       </div>
     </header>
 
@@ -33,13 +34,8 @@
   <!-- Intro modal -->
   <div id="intro-modal" class="modal-overlay">
     <div class="modal card">
-      <h1>Blackwood Manor</h1>
-      <p class="lede">Lord Edmund Blackwood was found dead in his study tonight, during a small
-      family gathering at the estate. The household believes it was his heart — but the
-      brandy glass beside him tells a different story.</p>
-      <p>You are the detective. Walk the manor grounds, talk to the household, and piece
-      together what really happened. Everyone knows something. Not everyone is telling the
-      truth.</p>
+      <h1 id="intro-heading">&nbsp;</h1>
+      <div id="intro-copy"></div>
       <ul class="controls-list">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys — move</li>
         <li><kbd>E</kbd> — talk to a person, or examine a highlighted object</li>
@@ -81,22 +77,34 @@
   <div id="accuse-modal" class="modal-overlay hidden">
     <div class="modal card">
       <h2>Make Your Accusation</h2>
-      <p class="lede">Choose carefully — think about what you've learned.</p>
+      <p class="lede">Name your suspect, then make your case. Explain how they did it and why —
+      a name alone won't convince anyone.</p>
       <form id="accuse-form">
         <label>Who did it?
           <select id="accuse-suspect" required></select>
         </label>
-        <label>What was the weapon?
-          <select id="accuse-weapon" required></select>
-        </label>
-        <label>What was the motive?
-          <select id="accuse-motive" required></select>
+        <label>Make your case
+          <textarea id="accuse-justification" required maxlength="800" rows="5"
+            placeholder="What was the method? What was the motive? What proves it?"></textarea>
         </label>
         <div class="modal-actions">
           <button type="button" id="accuse-cancel" class="ghost-btn">Cancel</button>
-          <button type="submit" class="primary-btn">Accuse</button>
+          <button type="submit" id="accuse-submit" class="primary-btn">Accuse</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Reset confirm modal -->
+  <div id="reset-modal" class="modal-overlay hidden">
+    <div class="modal card">
+      <h2>Start Over?</h2>
+      <p class="lede">This will erase your notebook, conversation history, and position in
+      the world. This can't be undone.</p>
+      <div class="modal-actions">
+        <button type="button" id="reset-cancel" class="ghost-btn">Cancel</button>
+        <button type="button" id="reset-confirm" class="primary-btn">Erase &amp; Restart</button>
+      </div>
     </div>
   </div>
 
@@ -105,6 +113,7 @@
     <div class="modal card">
       <h2 id="result-title">—</h2>
       <p id="result-narrative" class="lede"></p>
+      <blockquote id="result-confession" class="confession hidden"></blockquote>
       <div class="modal-actions">
         <button id="result-close" class="primary-btn">Continue</button>
       </div>
