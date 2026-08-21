@@ -68,6 +68,7 @@
   let notebookOpen = false;
   let sending = false;
   let introDismissed = false;
+  let resetting = false;
 
   // ---------------------------------------------------------------------
   // Save / load (localStorage)
@@ -86,6 +87,7 @@
   }
 
   function saveState() {
+    if (resetting) return;
     try {
       const state = {
         player: { x: player.x, y: player.y, facing: player.facing },
@@ -267,6 +269,7 @@
       document.getElementById("reset-modal").classList.add("hidden");
     });
     document.getElementById("reset-confirm").addEventListener("click", () => {
+      resetting = true;
       clearSavedState();
       window.location.reload();
     });
